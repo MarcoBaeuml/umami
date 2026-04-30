@@ -199,7 +199,7 @@ export function HookEditForm({
             <FormField label="" name="enabled">
               {({ value, onChange }: any) => (
                 <Switch isSelected={value} onChange={onChange}>
-                  Enabled
+                  {t(labels.enabled)}
                 </Switch>
               )}
             </FormField>

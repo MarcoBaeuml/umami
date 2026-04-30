@@ -156,7 +156,7 @@
     const onClick = async e => {
       const el = e.target;
 
-      await applyClickHooks(el);
+      applyClickHooks(el); // fire-and-forget, don't block the click
 
       const parentElement = el.closest('a,button');
       if (!parentElement) return trackElement(el);
@@ -187,7 +187,7 @@
     const handleForms = () => {
       document.addEventListener(
         'submit',
-        async e => {
+        e => {
           if (!hooksLoaded) return;
           const form = e.target;
           for (const serverHook of serverHooks) {
@@ -196,7 +196,7 @@
               if (selector) {
                 try {
                   if (form.matches(selector)) {
-                    await fireHook(serverHook);
+                    fireHook(serverHook); // fire-and-forget, don't block form submission
                   }
                 } catch {
                   /* invalid selector */

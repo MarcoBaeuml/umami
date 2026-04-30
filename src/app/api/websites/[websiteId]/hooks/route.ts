@@ -68,7 +68,7 @@ export async function POST(
     triggerType,
     triggerConfig,
     eventName,
-    eventData: eventData ?? undefined,
+    eventData: eventData ?? null,
   });
 
   return json(hook);

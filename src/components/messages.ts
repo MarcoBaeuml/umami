@@ -324,6 +324,7 @@ export const labels: Record<string, string> = {
   selectComponent: 'label.select-component',
   addLink: 'label.add-link',
   addPixel: 'label.add-pixel',
+  enabled: 'label.enabled',
   hooks: 'label.hooks',
   addHook: 'label.add-hook',
   triggerType: 'label.trigger-type',
