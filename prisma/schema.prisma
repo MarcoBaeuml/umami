@@ -82,6 +82,7 @@ model Website {
   createUser          User?               @relation("createUser", fields: [createdBy], references: [id])
   team                Team?               @relation(fields: [teamId], references: [id])
   eventData           EventData[]
+  hooks               Hook[]
   reports             Report[]
   revenue             Revenue[]
   segments            Segment[]
@@ -357,6 +358,25 @@ model Share {
 
   @@index([entityId])
   @@map("share")
+}
+
+model Hook {
+  id            String    @id() @map("hook_id") @db.Uuid
+  websiteId     String    @map("website_id") @db.Uuid
+  name          String    @db.VarChar(100)
+  enabled       Boolean   @default(true)
+  triggerType   String    @map("trigger_type") @db.VarChar(20)
+  triggerConfig Json      @map("trigger_config")
+  eventName     String    @map("event_name") @db.VarChar(50)
+  eventData     Json?     @map("event_data")
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  website Website @relation(fields: [websiteId], references: [id])
+
+  @@index([websiteId])
+  @@index([websiteId, enabled])
+  @@map("hook")
 }
 
 model SessionReplay {

@@ -42,10 +42,17 @@
   const host =
     hostUrl || '__COLLECT_API_HOST__' || currentScript.src.split('/').slice(0, -1).join('/');
   const endpoint = `${host.replace(/\/$/, '')}__COLLECT_API_ENDPOINT__`;
+  const hooksEndpoint = `${host.replace(/\/$/, '')}/api/hooks`;
   const screen = `${width}x${height}`;
   const eventRegex = /data-umami-event-([\w-_]+)/;
   const eventNameAttribute = `${_data}umami-event`;
   const delayDuration = 300;
+
+  /* Hook state */
+
+  let serverHooks = [];
+  let hooksLoaded = false;
+  let hookTimers = [];
 
   /* Helper functions */
 
@@ -91,7 +98,12 @@
     currentUrl = normalize(new URL(url, location.href).toString());
 
     if (currentUrl !== currentRef) {
-      setTimeout(track, delayDuration);
+      setTimeout(() => {
+        track();
+        applyUrlHooks();
+        applyPageviewHooks();
+        applyTimerHooks();
+      }, delayDuration);
     }
   };
 
@@ -122,8 +134,30 @@
         return track(eventName, eventData);
       }
     };
+
+    const applyClickHooks = async el => {
+      if (!hooksLoaded) return;
+      for (const serverHook of serverHooks) {
+        if (serverHook.triggerType === 'click') {
+          const selector = (serverHook.triggerConfig || {}).selector;
+          if (selector) {
+            try {
+              if (el.matches(selector) || el.closest(selector)) {
+                await fireHook(serverHook);
+              }
+            } catch {
+              /* invalid selector */
+            }
+          }
+        }
+      }
+    };
+
     const onClick = async e => {
       const el = e.target;
+
+      await applyClickHooks(el);
+
       const parentElement = el.closest('a,button');
       if (!parentElement) return trackElement(el);
 
@@ -149,6 +183,32 @@
       }
     };
     document.addEventListener('click', onClick, true);
+
+    const handleForms = () => {
+      document.addEventListener(
+        'submit',
+        async e => {
+          if (!hooksLoaded) return;
+          const form = e.target;
+          for (const serverHook of serverHooks) {
+            if (serverHook.triggerType === 'form') {
+              const selector = (serverHook.triggerConfig || {}).selector;
+              if (selector) {
+                try {
+                  if (form.matches(selector)) {
+                    await fireHook(serverHook);
+                  }
+                } catch {
+                  /* invalid selector */
+                }
+              }
+            }
+          }
+        },
+        true,
+      );
+    };
+    handleForms();
   };
 
   /* Tracking functions */
@@ -194,12 +254,91 @@
     }
   };
 
+  /* Hooks: URL matching helpers */
+
+  const matchUrl = (pattern, matchType, url) => {
+    try {
+      if (matchType === 'exact') return url === pattern;
+      if (matchType === 'regex') return new RegExp(pattern).test(url);
+      return url.includes(pattern);
+    } catch {
+      return false;
+    }
+  };
+
+  /* Hooks: fire a hook event */
+
+  const fireHook = serverHook => {
+    const { eventName, eventData } = serverHook;
+    return track(eventName, eventData || undefined);
+  };
+
+  /* Hooks: apply URL-type hooks for the current URL */
+
+  const applyUrlHooks = () => {
+    if (!hooksLoaded) return;
+    const url = currentUrl;
+    serverHooks.forEach(serverHook => {
+      if (serverHook.triggerType === 'url') {
+        const { urlPattern, matchType = 'contains' } = serverHook.triggerConfig || {};
+        if (urlPattern && matchUrl(urlPattern, matchType, url)) {
+          fireHook(serverHook);
+        }
+      }
+    });
+  };
+
+  /* Hooks: apply pageview-type hooks */
+
+  const applyPageviewHooks = () => {
+    if (!hooksLoaded) return;
+    serverHooks.forEach(serverHook => {
+      if (serverHook.triggerType === 'pageview') {
+        fireHook(serverHook);
+      }
+    });
+  };
+
+  /* Hooks: set up timer-type hooks */
+
+  const applyTimerHooks = () => {
+    hookTimers.forEach(id => clearTimeout(id));
+    hookTimers = [];
+    if (!hooksLoaded) return;
+    serverHooks.forEach(serverHook => {
+      if (serverHook.triggerType === 'timer') {
+        const delay = ((serverHook.triggerConfig || {}).delay || 5) * 1000;
+        hookTimers.push(setTimeout(() => fireHook(serverHook), delay));
+      }
+    });
+  };
+
+  /* Hooks: load from server and wire up listeners */
+
+  const loadHooks = async () => {
+    if (!website || trackingDisabled()) return;
+    try {
+      const res = await fetch(`${hooksEndpoint}?websiteId=${website}`, { credentials });
+      if (res.ok) {
+        const data = await res.json();
+        serverHooks = (data && data.hooks) || [];
+        hooksLoaded = true;
+        applyUrlHooks();
+        applyPageviewHooks();
+        applyTimerHooks();
+      }
+    } catch {
+      /* no-op */
+    }
+  };
+
   const init = () => {
     if (!initialized) {
       initialized = true;
       track();
       handlePathChanges();
       handleClicks();
+      loadHooks();
       if (perf) initPerformance();
     }
   };
